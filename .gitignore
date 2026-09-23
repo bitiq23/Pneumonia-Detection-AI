@@ -1,0 +1,27 @@
+# Python / environments
+venv/
+venv_broken_old/
+__pycache__/
+*.pyc
+
+# Editors / OS
+.idea/
+.DS_Store
+
+# Patient X-rays: never commit
+static/uploads/
+تجربة متعددة/
+
+# Large model files (only the .keras model is committed)
+*.h5
+
+# Figures: only the confusion matrices are committed
+figures/*
+!figures/1_confusion_matrix_v4_*.png
+
+# Internal reports and notes
+*.docx
+CLAUDE.md
+
+# Credentials
+kaggle.json

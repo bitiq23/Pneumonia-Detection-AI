@@ -1,0 +1,80 @@
+{
+  "model": "EfficientNetB0 (ImageNet) fine-tuned",
+  "input": {
+    "size": [
+      224,
+      224
+    ],
+    "pipeline": "PIL open -> convert('L') -> resize BILINEAR -> repeat to 3 channels",
+    "pixel_range": "0..255 float32 (do NOT divide by 255; model rescales internally)"
+  },
+  "output": "sigmoid = P(pneumonia)",
+  "threshold": 0.51,
+  "trained_on": {
+    "train": 16343,
+    "val": 2265,
+    "sources": "Kermany chest_xray (train+val) + RSNA Pneumonia (Normal / Lung Opacity)"
+  },
+  "test_results": {
+    "kermany_test_624": {
+      "at_0.5": {
+        "threshold": 0.5,
+        "accuracy": 85.42,
+        "precision": 81.08,
+        "recall": 100.0,
+        "specificity": 61.11,
+        "f1": 89.55,
+        "auc": 0.9634,
+        "tp": 390,
+        "tn": 143,
+        "fp": 91,
+        "fn": 0
+      },
+      "at_threshold": {
+        "threshold": 0.51,
+        "accuracy": 85.74,
+        "precision": 81.42,
+        "recall": 100.0,
+        "specificity": 61.97,
+        "f1": 89.76,
+        "auc": 0.9634,
+        "tp": 390,
+        "tn": 145,
+        "fp": 89,
+        "fn": 0
+      }
+    },
+    "rsna_test": {
+      "at_0.5": {
+        "threshold": 0.5,
+        "accuracy": 94.15,
+        "precision": 95.74,
+        "recall": 89.53,
+        "specificity": 97.29,
+        "f1": 92.53,
+        "auc": 0.9848,
+        "tp": 539,
+        "tn": 861,
+        "fp": 24,
+        "fn": 63
+      },
+      "at_threshold": {
+        "threshold": 0.51,
+        "accuracy": 93.95,
+        "precision": 95.71,
+        "recall": 89.04,
+        "specificity": 97.29,
+        "f1": 92.25,
+        "auc": 0.9848,
+        "tp": 536,
+        "tn": 861,
+        "fp": 24,
+        "fn": 66
+      }
+    }
+  },
+  "versions": {
+    "tensorflow": "2.20.0",
+    "keras": "3.12.0"
+  }
+}

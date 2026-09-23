@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chest X-ray AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ================= Tokens ================= */
+        :root {
+            --bg: #f2f5f7;
+            --surface: #ffffff;
+            --surface-2: #f6f9fa;
+            --border: #dbe3e8;
+            --border-strong: #c3cfd6;
+            --text: #0f1f2a;
+            --muted: #5a6b77;
+            --brand: #0b7285;
+            --brand-hover: #095c6b;
+            --brand-weak: #e2f3f5;
+            --ok: #1a8a5e;
+            --ok-weak: #e3f5ec;
+            --danger: #c93636;
+            --danger-weak: #fcebea;
+            --warn: #a86a05;
+            --warn-weak: #fdf2dc;
+            --shadow: 0 1px 2px rgba(15, 31, 42, .05), 0 4px 16px rgba(15, 31, 42, .06);
+
+            /* the X-ray lightbox stays dark in both themes, like a radiology monitor */
+            --viewer: #070b0e;
+            --viewer-2: #10171c;
+            --viewer-line: #22303a;
+            --viewer-text: #b9d0d8;
+            --viewer-accent: #4fd1e0;
+
+            --radius: 14px;
+            --radius-sm: 9px;
+            --font: 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+            color-scheme: light;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg: #0b1216; --surface: #111b21; --surface-2: #15222a; --border: #22323c; --border-strong: #30434f;
+                --text: #e2ebf0; --muted: #8ea1ae; --brand: #3cb4c7; --brand-hover: #5cc6d6; --brand-weak: #10303a;
+                --ok: #43c98f; --ok-weak: #0f2e24; --danger: #f06868; --danger-weak: #3a1a1c; --warn: #eeb04a; --warn-weak: #36290f;
+                --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+                color-scheme: dark;
+            }
+        }
+        :root[data-theme="dark"] {
+            --bg: #0b1216; --surface: #111b21; --surface-2: #15222a; --border: #22323c; --border-strong: #30434f;
+            --text: #e2ebf0; --muted: #8ea1ae; --brand: #3cb4c7; --brand-hover: #5cc6d6; --brand-weak: #10303a;
+            --ok: #43c98f; --ok-weak: #0f2e24; --danger: #f06868; --danger-weak: #3a1a1c; --warn: #eeb04a; --warn-weak: #36290f;
+            --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+            color-scheme: dark;
+        }
+
+        /* ================= Base ================= */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 15px;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        button, input { font: inherit; color: inherit; }
+        button { cursor: pointer; background: none; border: 0; }
+        img { display: block; max-width: 100%; }
+        .mono { font-family: var(--mono); font-feature-settings: "tnum"; }
+        .muted { color: var(--muted); }
+        .small { font-size: 12.5px; }
+        .hidden { display: none !important; }
+        .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+        :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+
+        .wrap { width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+        /* ================= Header ================= */
+        .topbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 20;
+        }
+        .topbar-inner { display: flex; align-items: center; gap: 16px; height: 64px; }
+        .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .brand-mark {
+            width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+            background: var(--brand); color: #fff;
+            display: grid; place-items: center; font-size: 18px;
+        }
+        .brand-name { font-weight: 700; font-size: 16px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .brand-sub { font-size: 12px; color: var(--muted); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .topbar-actions { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; }
+
+        .status {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 12px; border-radius: 999px;
+            background: var(--surface-2); border: 1px solid var(--border);
+            font-size: 12.5px; font-weight: 500; white-space: nowrap;
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+        .status.ok .status-dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-weak); }
+        .status.bad .status-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-weak); }
+
+        .icon-btn {
+            height: 36px; min-width: 36px; padding: 0 10px; border-radius: 9px;
+            border: 1px solid var(--border); background: var(--surface);
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            font-size: 13px; font-weight: 600; color: var(--muted);
+            transition: border-color .15s, color .15s;
+        }
+        .icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
+
+        /* ================= Tabs ================= */
+        .tabs-bar { background: var(--surface); border-bottom: 1px solid var(--border); }
+        .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 14px 14px 12px; font-weight: 600; font-size: 14px; color: var(--muted);
+            border-bottom: 2px solid transparent; white-space: nowrap;
+            transition: color .15s, border-color .15s;
+        }
+        .tab:hover { color: var(--text); }
+        .tab[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); }
+        .tab i { font-size: 14px; }
+
+        main { flex: 1; padding: 28px 0 48px; }
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .page-head { margin-bottom: 20px; }
+        .page-head h1 { font-size: 22px; font-weight: 700; line-height: 1.3; }
+        .page-head p { color: var(--muted); margin-top: 4px; max-width: 70ch; }
+
+        /* ================= Cards ================= */
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); box-shadow: var(--shadow);
+        }
+        .card-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+        }
+        .card-title { font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+        .card-title i { color: var(--brand); }
+        .card-body { padding: 18px; }
+
+        .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--muted); text-transform: uppercase; }
+
+        /* ================= Buttons ================= */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            height: 42px; padding: 0 18px; border-radius: 10px;
+            font-weight: 600; font-size: 14px; white-space: nowrap;
+            transition: background .15s, border-color .15s, color .15s, opacity .15s;
+        }
+        .btn-primary { background: var(--brand); color: #fff; }
+        .btn-primary:hover { background: var(--brand-hover); }
+        :root[data-theme="dark"] .btn-primary { color: #04181c; }
+        @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-primary { color: #04181c; } }
+        .btn-ghost { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+        .btn-ghost:hover { border-color: var(--border-strong); }
+        .btn:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-sm { height: 34px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+
+        /* ================= Chips ================= */
+        .chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: 13px; white-space: nowrap;
+        }
+        .chip-pos { background: var(--danger-weak); color: var(--danger); }
+        .chip-neg { background: var(--ok-weak); color: var(--ok); }
+        .chip-err { background: var(--warn-weak); color: var(--warn); }
+
+        /* ================= Single study layout ================= */
+        .study { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+
+        /* Viewer (lightbox) */
+        .viewer {
+            background: var(--viewer); border-radius: var(--radius); overflow: hidden;
+            border: 1px solid #000; box-shadow: var(--shadow);
+            display: flex; flex-direction: column;
+        }
+        .viewer-bar {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            padding: 10px 12px; background: var(--viewer-2); border-bottom: 1px solid var(--viewer-line);
+            color: var(--viewer-text); font-size: 12.5px;
+        }
+        .viewer-bar .label { font-family: var(--mono); letter-spacing: .06em; color: var(--viewer-accent); margin-inline-end: auto; }
+        .v-btn {
+            height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--viewer-line);
+            color: var(--viewer-text); display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+        }
+        .v-btn:hover { border-color: #3b5261; color: #fff; }
+        .v-btn[aria-pressed="true"] { background: #16323a; border-color: var(--viewer-accent); color: #fff; }
+        .v-range { display: inline-flex; align-items: center; gap: 6px; }
+        .v-range input { width: 80px; accent-color: var(--viewer-accent); }
+
+        .stage {
+            position: relative; aspect-ratio: 1 / 1; max-height: 620px; width: 100%;
+            display: grid; place-items: center; overflow: hidden;
+            background:
+                radial-gradient(ellipse at center, #0e161b 0%, var(--viewer) 70%);
+        }
+        #stage-content { position: absolute; inset: 0; display: grid; place-items: center; }
+        .stage img {
+            max-width: 100%; max-height: 100%; object-fit: contain;
+            transition: transform .25s ease; cursor: zoom-in; user-select: none;
+        }
+        .stage.zoomed img { transform: scale(2); cursor: zoom-out; }
+
+        /* corner brackets */
+        .stage .corner { position: absolute; width: 22px; height: 22px; border-color: #2f4855; border-style: solid; pointer-events: none; }
+        .stage .c-tl { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
+        .stage .c-tr { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
+        .stage .c-bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
+        .stage .c-br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+
+        .overlay-meta {
+            position: absolute; pointer-events: none; direction: ltr;
+            font-family: var(--mono); font-size: 11px; line-height: 1.5; color: #7fa2ae;
+            text-shadow: 0 1px 2px #000;
+        }
+        .overlay-meta.tl { top: 16px; left: 42px; }
+        .overlay-meta.br { bottom: 16px; right: 42px; text-align: right; }
+
+        .scanline {
+            position: absolute; left: 0; right: 0; height: 2px; top: 0;
+            background: var(--viewer-accent); box-shadow: 0 0 18px 4px rgba(79, 209, 224, .45);
+            animation: scan 1.8s ease-in-out infinite alternate; pointer-events: none;
+        }
+        @keyframes scan { from { top: 4%; } to { top: 96%; } }
+
+        .dropzone {
+            position: absolute; inset: 20px; border: 1.5px dashed #2f4855; border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+            text-align: center; color: var(--viewer-text); padding: 24px; cursor: pointer;
+            transition: border-color .15s, background .15s;
+        }
+        .dropzone:hover, .drag .dropzone { border-color: var(--viewer-accent); background: rgba(79, 209, 224, .05); }
+        .dropzone .dz-icon {
+            width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+            background: #0f2229; color: var(--viewer-accent); font-size: 26px; margin-bottom: 4px;
+        }
+        .dropzone strong { color: #e6f1f4; font-size: 16px; }
+        .dropzone .hint { font-size: 12.5px; color: #7b949e; }
+        .drag-veil {
+            position: absolute; inset: 0; display: none; place-items: center;
+            background: rgba(7, 11, 14, .8); color: var(--viewer-accent); font-weight: 600;
+            border: 2px dashed var(--viewer-accent); border-radius: var(--radius);
+        }
+        .drag .drag-veil.show-on-drag { display: grid; }
+
+        .viewer-foot {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+            padding: 10px 14px; background: var(--viewer-2); border-top: 1px solid var(--viewer-line);
+            color: var(--viewer-text); font-size: 13px;
+        }
+        .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+        .toggle input { appearance: none; width: 34px; height: 20px; border-radius: 999px; background: #22323c; position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+        .toggle input::after { content: ''; position: absolute; top: 3px; inset-inline-start: 3px; width: 14px; height: 14px; border-radius: 50%; background: #9fb6bf; transition: inset-inline-start .15s, background .15s; }
+        .toggle input:checked { background: #16505a; }
+        .toggle input:checked::after { inset-inline-start: 17px; background: var(--viewer-accent); }
+        .toggle .t-hint { color: #7b949e; font-size: 12px; }
+
+        /* Report */
+        .report-empty { padding: 40px 24px; text-align: center; color: var(--muted); }
+        .report-empty .re-icon { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 14px; display: grid; place-items: center; background: var(--brand-weak); color: var(--brand); font-size: 22px; }
+        .report-empty h3 { color: var(--text); font-size: 16px; margin-bottom: 6px; }
+        .steps { list-style: none; margin: 18px auto 0; max-width: 300px; text-align: start; display: grid; gap: 10px; counter-reset: s; }
+        .steps li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; }
+        .steps li::before { counter-increment: s; content: counter(s); flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--brand); }
+
+        .finding { border-radius: 12px; padding: 16px 18px; border: 1px solid; margin-bottom: 18px; }
+        .finding.pos { background: var(--danger-weak); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+        .finding.neg { background: var(--ok-weak); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+        .finding-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .finding-dx { font-size: 24px; font-weight: 700; line-height: 1.25; display: flex; align-items: center; gap: 10px; }
+        .finding.pos .finding-dx { color: var(--danger); }
+        .finding.neg .finding-dx { color: var(--ok); }
+        .finding-conf { text-align: end; }
+        .finding-conf .num { font-family: var(--mono); font-size: 26px; font-weight: 500; line-height: 1.1; }
+        .finding p { margin-top: 8px; font-size: 14px; }
+
+        .field { margin-bottom: 18px; }
+        .field-label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; gap: 8px; }
+
+        /* Probability gauge */
+        .gauge { direction: ltr; }
+        .gauge-track {
+            position: relative; height: 12px; border-radius: 999px; overflow: visible;
+            background: linear-gradient(90deg, var(--ok-weak) 0 50%, var(--danger-weak) 50% 100%);
+            border: 1px solid var(--border);
+        }
+        .gauge-fill { position: absolute; inset-block: 0; left: 0; border-radius: 999px; }
+        .gauge-threshold { position: absolute; top: -5px; bottom: -5px; left: 50%; width: 2px; background: var(--muted); opacity: .6; }
+        .gauge-marker {
+            position: absolute; top: 50%; width: 18px; height: 18px; border-radius: 50%;
+            transform: translate(-50%, -50%); background: var(--surface); border: 3px solid;
+            box-shadow: 0 1px 4px rgba(0,0,0,.2);
+        }
+        .gauge-scale { display: flex; justify-content: space-between; margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+        .gauge-legend { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-top: 2px; }
+        .gauge-legend .l-neg { color: var(--ok); }
+        .gauge-legend .l-pos { color: var(--danger); }
+
+        .kv { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+        .kv > div { padding: 12px 14px; border-bottom: 1px solid var(--border); min-width: 0; }
+        .kv > div:nth-child(odd) { border-inline-end: 1px solid var(--border); }
+        .kv > div:nth-last-child(-n+2) { border-bottom: 0; }
+        .kv dt { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+        .kv dd { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .notice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 12px; }
+        .notice i { margin-top: 3px; }
+        .notice.info { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+        .notice.info i { color: var(--brand); }
+        .notice.warn { background: var(--warn-weak); color: var(--warn); font-weight: 500; }
+        .notice.error { background: var(--danger-weak); color: var(--danger); font-weight: 500; }
+
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+        /* Loading skeleton */
+        .loading-box { padding: 36px 24px; text-align: center; }
+        .pulse-ring { width: 54px; height: 54px; margin: 0 auto 16px; border-radius: 50%; border: 3px solid var(--brand-weak); border-top-color: var(--brand); animation: spin .9s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-box h3 { font-size: 16px; margin-bottom: 4px; }
+        .loading-steps { list-style: none; display: grid; gap: 8px; max-width: 280px; margin: 18px auto 0; text-align: start; font-size: 13px; color: var(--muted); }
+        .loading-steps li { display: flex; align-items: center; gap: 8px; }
+        .loading-steps i { color: var(--brand); width: 16px; }
+
+        /* ================= Batch ================= */
+        .batch-drop {
+            border: 1.5px dashed var(--border-strong); border-radius: var(--radius); background: var(--surface);
+            padding: 36px 24px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+        }
+        .batch-drop:hover, .batch-drop.drag { border-color: var(--brand); background: var(--brand-weak); }
+        .batch-drop .bd-icon { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 14px; display: grid; place-items: center; background: var(--brand-weak); color: var(--brand); font-size: 22px; }
+        .batch-drop strong { font-size: 16px; display: block; }
+        .batch-drop .hint { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+        .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+        .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
+        .tile-label { font-size: 12.5px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .tile-value { font-family: var(--mono); font-size: 28px; font-weight: 500; line-height: 1.2; margin-top: 6px; }
+        .tile-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .tile.pos .tile-value { color: var(--danger); }
+        .tile.neg .tile-value { color: var(--ok); }
+
+        .dist { margin-bottom: 20px; }
+        .dist-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); gap: 2px; }
+        .dist-bar span { display: block; height: 100%; }
+        .dist-legend { display: flex; gap: 18px; margin-top: 10px; font-size: 13px; flex-wrap: wrap; }
+        .dist-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+        .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+        .seg button { padding: 6px 12px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--muted); }
+        .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { text-align: start; font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+        td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tbody tr:last-child td { border-bottom: 0; }
+        tbody tr:hover td { background: var(--surface-2); }
+        .thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--viewer); border: 1px solid var(--border); }
+        .fname { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; text-align: start; unicode-bidi: plaintext; }
+        .mini-bar { width: 90px; height: 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; display: inline-block; vertical-align: middle; margin-inline-end: 8px; }
+        .mini-bar span { display: block; height: 100%; }
+        .flag { color: var(--warn); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+
+        /* ================= Compare ================= */
+        .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .slot {
+            position: relative; background: var(--viewer); border-radius: var(--radius); overflow: hidden;
+            aspect-ratio: 4 / 3; cursor: pointer; border: 1px solid #000;
+        }
+        .slot img { width: 100%; height: 100%; object-fit: contain; }
+        .slot .slot-tag {
+            position: absolute; top: 10px; inset-inline-start: 10px; z-index: 2;
+            background: rgba(7, 11, 14, .8); color: var(--viewer-accent); border: 1px solid var(--viewer-line);
+            font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+        }
+        .slot .slot-change {
+            position: absolute; bottom: 10px; inset-inline-end: 10px; z-index: 2;
+            background: rgba(7, 11, 14, .85); color: #e6f1f4; border: 1px solid var(--viewer-line);
+            font-size: 12px; padding: 4px 10px; border-radius: 8px;
+        }
+        .slot.drag { outline: 2px dashed var(--viewer-accent); outline-offset: -8px; }
+        .compare-cta { display: flex; justify-content: center; margin: 20px 0 8px; }
+
+        .verdict {
+            display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center;
+            padding: 18px 20px; margin: 20px 0;
+        }
+        .verdict-icon { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; }
+        .verdict h3 { font-size: 18px; line-height: 1.3; }
+        .verdict-stats { display: flex; gap: 22px; }
+        .verdict-stats div { text-align: center; }
+        .verdict-stats .v { font-family: var(--mono); font-size: 20px; font-weight: 500; }
+        .verdict-stats .k { font-size: 12px; color: var(--muted); }
+
+        .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .pair .card-body .kv { margin-bottom: 0; }
+        .pair-img { background: var(--viewer); aspect-ratio: 4 / 3; }
+        .pair-img img { width: 100%; height: 100%; object-fit: contain; }
+
+        /* ================= About ================= */
+        .about-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+        .metric-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .breakdown .tile-value { font-size: 22px; }
+        .metric .tile-value { color: var(--brand); }
+        .spec { width: 100%; }
+        .spec td { padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .spec td:first-child { color: var(--muted); width: 45%; }
+        .spec td:last-child { font-weight: 600; }
+        .spec tr:last-child td { border-bottom: 0; }
+        .legend-list { list-style: none; display: grid; gap: 10px; }
+        .legend-list li { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; font-size: 13.5px; }
+        .legend-list .range { font-family: var(--mono); font-size: 12.5px; color: var(--muted); direction: ltr; text-align: start; }
+        .section-h { font-size: 13px; font-weight: 700; margin: 18px 0 10px; color: var(--text); }
+        .section-h:first-child { margin-top: 0; }
+        .pipeline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .pipeline span { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; font-weight: 600; }
+        .pipeline i { color: var(--muted); font-size: 11px; }
+        [dir="rtl"] .pipeline i { transform: scaleX(-1); }
+        .bullets { padding-inline-start: 18px; display: grid; gap: 6px; font-size: 13.5px; color: var(--muted); }
+
+        /* ================= Footer ================= */
+        footer { border-top: 1px solid var(--border); background: var(--surface); padding: 18px 0; font-size: 12.5px; color: var(--muted); }
+        .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .foot a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+        .foot a:hover { color: var(--brand); }
+        .foot-links { display: flex; gap: 16px; }
+
+        .print-head { display: none; }
+
+        /* ================= Responsive ================= */
+        @media (max-width: 960px) {
+            .study, .about-grid { grid-template-columns: 1fr; }
+            .tiles, .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .verdict { grid-template-columns: auto 1fr; }
+            .verdict-stats { grid-column: 1 / -1; justify-content: space-around; }
+        }
+        @media (max-width: 640px) {
+            .wrap { padding: 0 16px; }
+            .brand-sub, .status-text { display: none; }
+            .status { padding: 6px 8px; }
+            .slots, .pair { grid-template-columns: 1fr; }
+            .metric-row, .breakdown { grid-template-columns: 1fr; }
+            .kv { grid-template-columns: 1fr; }
+            .kv > div:nth-child(odd) { border-inline-end: 0; }
+            .kv > div:nth-last-child(2) { border-bottom: 1px solid var(--border); }
+            .finding-dx { font-size: 20px; }
+            .v-range input { width: 60px; }
+            .page-head h1 { font-size: 19px; }
+            .col-hide-sm { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+        }
+
+        /* ================= Print (single-study report) ================= */
+        @media print {
+            :root { --bg: #fff; --surface: #fff; --shadow: none; }
+            body { background: #fff; }
+            .topbar, .tabs-bar, footer, .page-head, .viewer-bar, .viewer-foot, .actions, .overlay-meta, .panel:not(.active) { display: none !important; }
+            .print-head { display: block; margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+            .study { grid-template-columns: 1fr 1fr; }
+            .stage { max-height: 360px; }
+            .card, .viewer { box-shadow: none; break-inside: avoid; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="wrap topbar-inner">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true"><i class="fa-solid fa-lungs"></i></div>
+                <div style="min-width:0">
+                    <div class="brand-name" data-i18n="brand.name"></div>
+                    <div class="brand-sub" data-i18n="brand.sub"></div>
+                </div>
+            </div>
+            <div class="topbar-actions">
+                <span class="status" id="status" role="status">
+                    <span class="status-dot"></span>
+                    <span class="status-text" id="status-text" data-i18n="status.checking"></span>
+                </span>
+                <button class="icon-btn" id="lang-btn" type="button" aria-label="Language"></button>
+                <button class="icon-btn" id="theme-btn" type="button" data-i18n-aria="theme.toggle"><i class="fa-solid fa-circle-half-stroke"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <nav class="tabs-bar">
+        <div class="wrap tabs" role="tablist">
+            <button class="tab" role="tab" data-tab="single" aria-selected="true"><i class="fa-solid fa-x-ray"></i><span data-i18n="tab.single"></span></button>
+            <button class="tab" role="tab" data-tab="batch" aria-selected="false"><i class="fa-solid fa-layer-group"></i><span data-i18n="tab.batch"></span></button>
+            <button class="tab" role="tab" data-tab="compare" aria-selected="false"><i class="fa-solid fa-code-compare"></i><span data-i18n="tab.compare"></span></button>
+            <button class="tab" role="tab" data-tab="about" aria-selected="false"><i class="fa-solid fa-circle-info"></i><span data-i18n="tab.about"></span></button>
+        </div>
+    </nav>
+
+    <main>
+        <div class="wrap">
+
+            <!-- ============ Single study ============ -->
+            <section class="panel active" id="panel-single" role="tabpanel">
+                <div class="print-head">
+                    <strong data-i18n="print.title"></strong>
+                    <div class="small" id="print-date"></div>
+                </div>
+                <div class="page-head">
+                    <h1 data-i18n="single.title"></h1>
+                    <p data-i18n="single.desc"></p>
+                </div>
+
+                <div class="study">
+                    <div class="viewer" id="single-viewer">
+                        <div class="viewer-bar">
+                            <span class="label">CHEST X-RAY</span>
+                            <button class="v-btn" type="button" id="v-invert" aria-pressed="false"><i class="fa-solid fa-circle-half-stroke"></i><span data-i18n="viewer.invert"></span></button>
+                            <label class="v-range"><i class="fa-solid fa-sun"></i><span class="sr-only" data-i18n="viewer.brightness"></span><input type="range" id="v-bright" min="50" max="170" value="100"></label>
+                            <label class="v-range"><i class="fa-solid fa-circle-dot"></i><span class="sr-only" data-i18n="viewer.contrast"></span><input type="range" id="v-contrast" min="50" max="200" value="100"></label>
+                            <button class="v-btn" type="button" id="v-reset" data-i18n-aria="viewer.reset"><i class="fa-solid fa-rotate-left"></i></button>
+                        </div>
+                        <div class="stage" id="stage">
+                            <span class="corner c-tl"></span><span class="corner c-tr"></span>
+                            <span class="corner c-bl"></span><span class="corner c-br"></span>
+                            <div id="stage-content"></div>
+                            <div class="drag-veil show-on-drag"><span data-i18n="drop.release"></span></div>
+                        </div>
+                        <div class="viewer-foot">
+                            <label class="toggle">
+                                <input type="checkbox" id="enhance">
+                                <span><span data-i18n="enhance.label"></span> <span class="t-hint" data-i18n="enhance.hint"></span></span>
+                            </label>
+                            <button class="v-btn" type="button" id="single-pick"><i class="fa-solid fa-folder-open"></i><span data-i18n="viewer.open"></span></button>
+                        </div>
+                        <input type="file" id="single-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden>
+                    </div>
+
+                    <div class="card" id="single-report"></div>
+                </div>
+            </section>
+
+            <!-- ============ Batch ============ -->
+            <section class="panel" id="panel-batch" role="tabpanel">
+                <div class="page-head">
+                    <h1 data-i18n="batch.title"></h1>
+                    <p data-i18n="batch.desc"></p>
+                </div>
+                <div class="batch-drop" id="batch-drop" tabindex="0" role="button">
+                    <div class="bd-icon"><i class="fa-solid fa-images"></i></div>
+                    <strong data-i18n="batch.drop"></strong>
+                    <div class="hint" data-i18n="formats"></div>
+                    <input type="file" id="batch-files" accept=".png,.jpg,.jpeg,image/png,image/jpeg" multiple hidden>
+                </div>
+                <div id="batch-results"></div>
+            </section>
+
+            <!-- ============ Compare ============ -->
+            <section class="panel" id="panel-compare" role="tabpanel">
+                <div class="page-head">
+                    <h1 data-i18n="compare.title"></h1>
+                    <p data-i18n="compare.desc"></p>
+                </div>
+                <div class="slots">
+                    <div class="slot" id="slot-1" data-slot="1" tabindex="0" role="button"></div>
+                    <div class="slot" id="slot-2" data-slot="2" tabindex="0" role="button"></div>
+                    <input type="file" id="compare-file-1" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden>
+                    <input type="file" id="compare-file-2" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden>
+                </div>
+                <div class="compare-cta">
+                    <button class="btn btn-primary" id="compare-btn" type="button" disabled><i class="fa-solid fa-code-compare"></i><span data-i18n="compare.run"></span></button>
+                </div>
+                <div id="compare-results"></div>
+            </section>
+
+            <!-- ============ About ============ -->
+            <section class="panel" id="panel-about" role="tabpanel">
+                <div class="page-head">
+                    <h1 data-i18n="about.title"></h1>
+                    <p data-i18n="about.desc"></p>
+                </div>
+                <div id="about-content"></div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="wrap foot">
+            <span data-i18n="footer.note"></span>
+            <div class="foot-links">
+                <a href="https://github.com/bitiq23" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-github"></i> GitHub</a>
+                <a href="mailto:alihematuoitc@gmail.com"><i class="fa-solid fa-envelope"></i><span data-i18n="footer.contact"></span></a>
+            </div>
+        </div>
+    </footer>
+
+<script>
+    // Relative so the page works on whatever host/port Flask is served from.
+    const API_URL = '/api';
+    const MAX_BYTES = 16 * 1024 * 1024;
+    const ALLOWED = ['png', 'jpg', 'jpeg'];
+
+    /* ======================= i18n ======================= */
+    const I18N = {
+        ar: {
+            'brand.name': 'الكشف عن الالتهاب الرئوي',
+            'brand.sub': 'تحليل أشعة الصدر بالذكاء الاصطناعي',
+            'status.checking': 'جارٍ فحص الخادم…',
+            'status.ready': 'النموذج جاهز',
+            'status.noModel': 'النموذج غير محمّل',
+            'status.offline': 'الخادم غير متصل',
+            'theme.toggle': 'تبديل المظهر',
+            'tab.single': 'فحص صورة',
+            'tab.batch': 'فحص مجموعة',
+            'tab.compare': 'مقارنة صورتين',
+            'tab.about': 'عن النموذج',
+            'formats': 'PNG · JPG · JPEG — حتى 16 ميغابايت',
+            'single.title': 'فحص صورة أشعة صدر',
+            'single.desc': 'ارفع صورة أشعة سينية أمامية للصدر، وسيعرض النظام احتمال وجود الالتهاب الرئوي مع تقرير مختصر قابل للطباعة.',
+            'viewer.invert': 'عكس',
+            'viewer.brightness': 'السطوع',
+            'viewer.contrast': 'التباين',
+            'viewer.reset': 'إعادة الضبط',
+            'viewer.open': 'صورة جديدة',
+            'drop.title': 'اسحب صورة الأشعة إلى هنا',
+            'drop.or': 'أو اضغط لاختيار ملف من جهازك',
+            'drop.release': 'أفلت الصورة لبدء التحليل',
+            'enhance.label': 'تحسين التباين (CLAHE)',
+            'enhance.hint': 'للصور الباهتة',
+            'report.emptyTitle': 'بانتظار صورة',
+            'report.emptyDesc': 'سيظهر تقرير التحليل هنا.',
+            'step.1': 'ارفع صورة أشعة صدر بصيغة PNG أو JPG',
+            'step.2': 'يحلل النموذج الصورة خلال ثوانٍ',
+            'step.3': 'راجع النتيجة واطبع التقرير',
+            'loading.title': 'جارٍ تحليل الصورة…',
+            'loading.s1': 'رفع الصورة',
+            'loading.s2': 'تحويل إلى تدرج رمادي وتحجيم 224×224',
+            'loading.s3': 'تشغيل الشبكة العصبية',
+            'report.title': 'تقرير التحليل',
+            'report.finding': 'النتيجة',
+            'report.confidence': 'درجة الثقة',
+            'report.prob': 'احتمال الالتهاب الرئوي',
+            'report.level': 'مستوى الثقة',
+            'report.severity': 'مؤشر الشدة',
+            'report.normalProb': 'احتمال السلامة',
+            'report.file': 'الملف',
+            'report.enhance': 'تحسين التباين',
+            'report.time': 'وقت الفحص',
+            'yes': 'مفعّل', 'no': 'غير مفعّل',
+            'finding.pos': 'رصد النموذج أنماطًا في الصورة تتوافق مع الالتهاب الرئوي.',
+            'finding.neg': 'لم يرصد النموذج أنماطًا تدل على الالتهاب الرئوي.',
+            'near.threshold': 'النتيجة قريبة من حدّ القرار ({th}%). يُنصح بمراجعة إضافية من الطبيب.',
+            'disclaimer': 'هذه النتيجة أداة مساعدة وليست تشخيصًا نهائيًا، ويجب أن يراجعها طبيب مختص.',
+            'btn.print': 'طباعة التقرير',
+            'btn.new': 'فحص صورة أخرى',
+            'btn.retry': 'إعادة المحاولة',
+            'gauge.threshold': 'حدّ القرار',
+            'gauge.normal': 'طبيعي',
+            'gauge.pneumonia': 'التهاب رئوي',
+            'dx.Normal': 'طبيعي',
+            'dx.Pneumonia': 'التهاب رئوي',
+            'sev.Very High': 'مرتفع جدًا', 'sev.High': 'مرتفع', 'sev.Medium': 'متوسط', 'sev.Low': 'منخفض', 'sev.N/A': '—',
+            'conf.Very Confident': 'ثقة عالية جدًا', 'conf.Confident': 'ثقة عالية', 'conf.Moderate': 'ثقة متوسطة', 'conf.Low Confidence': 'ثقة منخفضة',
+            'err.title': 'تعذّر التحليل',
+            'err.type': 'صيغة غير مدعومة. استخدم PNG أو JPG أو JPEG.',
+            'err.size': 'حجم الملف أكبر من 16 ميغابايت.',
+            'err.network': 'تعذّر الاتصال بالخادم. تأكد من تشغيل app.py.',
+            'batch.title': 'فحص مجموعة صور',
+            'batch.desc': 'حلّل عدة صور أشعة دفعة واحدة، واحصل على ملخص إحصائي وجدول قابل للتصفية والتصدير.',
+            'batch.drop': 'اسحب عدة صور إلى هنا أو اضغط للاختيار',
+            'batch.loading': 'جارٍ تحليل {n} صورة…',
+            'batch.total': 'إجمالي الصور',
+            'batch.avg': 'متوسط الثقة',
+            'batch.range': 'المدى {min}% – {max}%',
+            'batch.dist': 'توزيع النتائج',
+            'batch.results': 'نتائج الصور',
+            'batch.all': 'الكل',
+            'batch.export': 'تصدير CSV',
+            'batch.lowConf': 'تحتاج مراجعة',
+            'batch.failed': 'فشل',
+            'batch.none': 'لا توجد نتائج مطابقة.',
+            'col.image': 'الصورة', 'col.file': 'الملف', 'col.result': 'النتيجة', 'col.conf': 'الثقة', 'col.prob': 'احتمال الالتهاب',
+            'compare.title': 'مقارنة صورتين',
+            'compare.desc': 'قارن بين صورتين للمريض نفسه، مثل فحص سابق وفحص متابعة، لمعرفة اتفاق النتيجتين والتغيّر في الاحتمال.',
+            'compare.slot1': 'الصورة الأولى · السابقة',
+            'compare.slot2': 'الصورة الثانية · المتابعة',
+            'compare.pick': 'اضغط أو اسحب صورة',
+            'compare.change': 'تغيير',
+            'compare.run': 'قارن الصورتين',
+            'compare.loading': 'جارٍ مقارنة الصورتين…',
+            'compare.same': 'الصورتان متفقتان: {dx}',
+            'compare.diff': 'نتيجتان مختلفتان بين الصورتين',
+            'compare.confDiff': 'فرق الثقة',
+            'compare.delta': 'تغيّر احتمال الالتهاب',
+            'compare.moreConf': 'الأعلى ثقة',
+            'compare.img1': 'الأولى', 'compare.img2': 'الثانية',
+            'agree.Strong Agreement': 'اتفاق قوي', 'agree.Moderate Agreement': 'اتفاق متوسط', 'agree.Weak Agreement': 'اتفاق ضعيف', 'agree.Disagreement': 'عدم اتفاق',
+            'about.title': 'عن النموذج',
+            'about.desc': 'معلومات تقنية عن الشبكة العصبية المستخدمة وطريقة قراءة النتائج وحدودها.',
+            'about.accuracy': 'الدقة الكلية', 'about.recall': 'الحساسية', 'about.precision': 'الضبط', 'about.specificity': 'النوعية',
+            'about.specificityHint': 'نسبة الصور السليمة المصنفة صحيحًا',
+            'about.breakdown': 'النتائج حسب مجموعة الاختبار',
+            'about.kermany': 'Kermany · أطفال', 'about.rsna': 'RSNA · بالغين', 'about.images': 'صورة',
+            'about.trainImages': 'صور التدريب',
+            'about.recallHint': 'نسبة الحالات المصابة التي يكتشفها',
+            'about.accuracyHint': 'على {n} صورة اختبار مستقلة',
+            'about.precisionHint': 'نسبة التنبيهات الصحيحة',
+            'about.specs': 'المواصفات التقنية',
+            'about.name': 'الاسم', 'about.version': 'الإصدار', 'about.arch': 'البنية', 'about.layers': 'عدد الطبقات',
+            'about.params': 'عدد المعاملات', 'about.input': 'حجم الإدخال', 'about.output': 'الإخراج', 'about.file': 'ملف النموذج',
+            'about.outputVal': 'احتمال واحد (Sigmoid)',
+            'about.pipeline': 'مسار المعالجة',
+            'pipe.load': 'تحميل الصورة', 'pipe.resize': 'رمادي · 224×224', 'pipe.norm': 'EfficientNetB0', 'pipe.cnn': 'Sigmoid', 'pipe.out': 'احتمال',
+            'about.read': 'كيف تقرأ النتيجة',
+            'about.threshold': 'إذا تجاوز الاحتمال {th}% تُصنَّف الصورة «التهاب رئوي»، وإلا «طبيعي». اختير هذا الحدّ من بيانات التحقق.',
+            'about.severity': 'مؤشر الشدة (للحالات الإيجابية)',
+            'about.confLevels': 'مستويات الثقة',
+            'about.limits': 'حدود الاستخدام',
+            'limit.1': 'مُدرَّب على صور أشعة أمامية للصدر (أطفال وبالغين) فقط؛ الصور الأخرى تعطي نتائج غير موثوقة.',
+            'limit.2': 'مؤشر الشدة مشتق من الاحتمال ولا يقيس شدة المرض سريريًا.',
+            'limit.3': 'لا يميّز بين الالتهاب البكتيري والفيروسي.',
+            'limit.4': 'لا يغني عن تقييم الطبيب والفحص السريري.',
+            'about.unavailable': 'تعذّر جلب معلومات النموذج من الخادم.',
+            'footer.note': 'أداة مساعدة للتشخيص · لا تُستخدم بديلًا عن الطبيب',
+            'footer.contact': 'تواصل',
+            'print.title': 'تقرير تحليل صورة أشعة صدر — الكشف عن الالتهاب الرئوي'
+        },
+        en: {
+            'brand.name': 'Pneumonia Detection',
+            'brand.sub': 'AI chest X-ray analysis',
+            'status.checking': 'Checking server…',
+            'status.ready': 'Model ready',
+            'status.noModel': 'Model not loaded',
+            'status.offline': 'Server offline',
+            'theme.toggle': 'Toggle theme',
+            'tab.single': 'Single study',
+            'tab.batch': 'Batch',
+            'tab.compare': 'Compare',
+            'tab.about': 'About the model',
+            'formats': 'PNG · JPG · JPEG — up to 16 MB',
+            'single.title': 'Chest X-ray study',
+            'single.desc': 'Upload a frontal chest X-ray. The system returns the probability of pneumonia with a short, printable report.',
+            'viewer.invert': 'Invert',
+            'viewer.brightness': 'Brightness',
+            'viewer.contrast': 'Contrast',
+            'viewer.reset': 'Reset',
+            'viewer.open': 'New image',
+            'drop.title': 'Drag a chest X-ray here',
+            'drop.or': 'or click to choose a file',
+            'drop.release': 'Release to start the analysis',
+            'enhance.label': 'Contrast enhancement (CLAHE)',
+            'enhance.hint': 'for faded images',
+            'report.emptyTitle': 'Waiting for an image',
+            'report.emptyDesc': 'The analysis report will appear here.',
+            'step.1': 'Upload a PNG or JPG chest X-ray',
+            'step.2': 'The model analyzes it in seconds',
+            'step.3': 'Review the result and print the report',
+            'loading.title': 'Analyzing image…',
+            'loading.s1': 'Uploading image',
+            'loading.s2': 'Grayscale and resize to 224×224',
+            'loading.s3': 'Running the neural network',
+            'report.title': 'Analysis report',
+            'report.finding': 'Finding',
+            'report.confidence': 'Confidence',
+            'report.prob': 'Pneumonia probability',
+            'report.level': 'Confidence level',
+            'report.severity': 'Severity index',
+            'report.normalProb': 'Normal probability',
+            'report.file': 'File',
+            'report.enhance': 'Contrast enhancement',
+            'report.time': 'Study time',
+            'yes': 'On', 'no': 'Off',
+            'finding.pos': 'The model detected patterns consistent with pneumonia.',
+            'finding.neg': 'The model did not detect patterns indicating pneumonia.',
+            'near.threshold': 'This result is close to the {th}% decision threshold. Additional review by a physician is advised.',
+            'disclaimer': 'This result is a decision-support aid, not a final diagnosis. It must be reviewed by a qualified physician.',
+            'btn.print': 'Print report',
+            'btn.new': 'Analyze another image',
+            'btn.retry': 'Retry',
+            'gauge.threshold': 'threshold',
+            'gauge.normal': 'Normal',
+            'gauge.pneumonia': 'Pneumonia',
+            'dx.Normal': 'Normal',
+            'dx.Pneumonia': 'Pneumonia',
+            'sev.Very High': 'Very high', 'sev.High': 'High', 'sev.Medium': 'Medium', 'sev.Low': 'Low', 'sev.N/A': '—',
+            'conf.Very Confident': 'Very confident', 'conf.Confident': 'Confident', 'conf.Moderate': 'Moderate', 'conf.Low Confidence': 'Low confidence',
+            'err.title': 'Analysis failed',
+            'err.type': 'Unsupported format. Use PNG, JPG or JPEG.',
+            'err.size': 'File is larger than 16 MB.',
+            'err.network': 'Could not reach the server. Make sure app.py is running.',
+            'batch.title': 'Batch analysis',
+            'batch.desc': 'Analyze several X-rays at once and get a statistical summary with a filterable, exportable table.',
+            'batch.drop': 'Drag several images here or click to choose',
+            'batch.loading': 'Analyzing {n} images…',
+            'batch.total': 'Total images',
+            'batch.avg': 'Avg. confidence',
+            'batch.range': 'range {min}% – {max}%',
+            'batch.dist': 'Result distribution',
+            'batch.results': 'Per-image results',
+            'batch.all': 'All',
+            'batch.export': 'Export CSV',
+            'batch.lowConf': 'Needs review',
+            'batch.failed': 'Failed',
+            'batch.none': 'No matching results.',
+            'col.image': 'Image', 'col.file': 'File', 'col.result': 'Result', 'col.conf': 'Confidence', 'col.prob': 'Pneumonia prob.',
+            'compare.title': 'Compare two studies',
+            'compare.desc': 'Compare two images of the same patient, such as a prior and a follow-up study, to see whether the results agree and how the probability changed.',
+            'compare.slot1': 'Image 1 · Prior',
+            'compare.slot2': 'Image 2 · Follow-up',
+            'compare.pick': 'Click or drop an image',
+            'compare.change': 'Change',
+            'compare.run': 'Compare images',
+            'compare.loading': 'Comparing images…',
+            'compare.same': 'Both images agree: {dx}',
+            'compare.diff': 'The two images give different results',
+            'compare.confDiff': 'Confidence gap',
+            'compare.delta': 'Pneumonia prob. change',
+            'compare.moreConf': 'More confident',
+            'compare.img1': 'Image 1', 'compare.img2': 'Image 2',
+            'agree.Strong Agreement': 'Strong agreement', 'agree.Moderate Agreement': 'Moderate agreement', 'agree.Weak Agreement': 'Weak agreement', 'agree.Disagreement': 'Disagreement',
+            'about.title': 'About the model',
+            'about.desc': 'Technical details of the neural network, how to read its output, and its limitations.',
+            'about.accuracy': 'Overall accuracy', 'about.recall': 'Sensitivity', 'about.precision': 'Precision', 'about.specificity': 'Specificity',
+            'about.specificityHint': 'share of normal images labeled correctly',
+            'about.breakdown': 'Results by test set',
+            'about.kermany': 'Kermany · children', 'about.rsna': 'RSNA · adults', 'about.images': 'images',
+            'about.trainImages': 'Training images',
+            'about.recallHint': 'share of pneumonia cases detected',
+            'about.accuracyHint': 'on {n} independent test images',
+            'about.precisionHint': 'share of positive calls that are correct',
+            'about.specs': 'Technical specs',
+            'about.name': 'Name', 'about.version': 'Version', 'about.arch': 'Architecture', 'about.layers': 'Layers',
+            'about.params': 'Parameters', 'about.input': 'Input size', 'about.output': 'Output', 'about.file': 'Model file',
+            'about.outputVal': 'single probability (sigmoid)',
+            'about.pipeline': 'Processing pipeline',
+            'pipe.load': 'Load image', 'pipe.resize': 'Grayscale · 224×224', 'pipe.norm': 'EfficientNetB0', 'pipe.cnn': 'Sigmoid', 'pipe.out': 'Probability',
+            'about.read': 'Reading the result',
+            'about.threshold': 'If the probability exceeds {th}% the image is labeled "Pneumonia", otherwise "Normal". The threshold was chosen on validation data.',
+            'about.severity': 'Severity index (positive cases)',
+            'about.confLevels': 'Confidence levels',
+            'about.limits': 'Limitations',
+            'limit.1': 'Trained on frontal chest X-rays (children and adults) only; other images give unreliable results.',
+            'limit.2': 'The severity index is derived from the probability, not a clinical severity score.',
+            'limit.3': 'Does not distinguish bacterial from viral pneumonia.',
+            'limit.4': 'Does not replace a physician’s assessment and clinical examination.',
+            'about.unavailable': 'Could not load model information from the server.',
+            'footer.note': 'Decision-support tool · not a substitute for a physician',
+            'footer.contact': 'Contact',
+            'print.title': 'Chest X-ray analysis report — Pneumonia detection'
+        }
+    };
+
+    const store = {
+        get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+        set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    };
+
+    let lang = store.get('lang') === 'en' ? 'en' : 'ar';
+
+    function t(key, vars) {
+        let s = I18N[lang][key] ?? I18N.en[key] ?? key;
+        if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(v);
+        return s;
+    }
+
+    function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function applyLang() {
+        const root = document.documentElement;
+        root.lang = lang;
+        root.dir = lang === 'ar' ? 'rtl' : 'ltr';
+        document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+        document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+        document.getElementById('lang-btn').textContent = lang === 'ar' ? 'EN' : 'ع';
+        document.title = lang === 'ar' ? 'الكشف عن الالتهاب الرئوي' : 'Pneumonia Detection';
+        renderStatus();
+        renderSingle();
+        renderBatch();
+        renderSlots();
+        renderCompare();
+        renderAbout();
+    }
+
+    document.getElementById('lang-btn').addEventListener('click', () => {
+        lang = lang === 'ar' ? 'en' : 'ar';
+        store.set('lang', lang);
+        applyLang();
+    });
+
+    /* ======================= Theme ======================= */
+    (function initTheme() {
+        const saved = store.get('theme');
+        if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+        document.getElementById('theme-btn').addEventListener('click', () => {
+            const cur = document.documentElement.dataset.theme
+                || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            const next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.dataset.theme = next;
+            store.set('theme', next);
+        });
+    })();
+
+    /* ======================= Tabs ======================= */
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x === tab)));
+            document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab.dataset.tab));
+            if (tab.dataset.tab === 'about' && !state.about.data && !state.about.loading) loadAbout();
+        });
+    });
+
+    /* ======================= Shared helpers ======================= */
+    const state = {
+        health: 'checking',
+        threshold: 51, // percent; replaced by the server's value from /api/model-info
+        single: { file: null, url: null, loading: false, data: null, error: null, enhance: false, dims: null },
+        batch: { loading: false, count: 0, data: null, error: null, filter: 'all' },
+        compare: { files: [null, null], urls: [null, null], loading: false, data: null, error: null },
+        about: { loading: false, data: null, error: null }
+    };
+
+    function validateFile(file) {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (!ALLOWED.includes(ext)) return t('err.type');
+        if (file.size > MAX_BYTES) return t('err.size');
+        return null;
+    }
+
+    async function postForm(path, form) {
+        let res;
+        try {
+            res = await fetch(`${API_URL}${path}`, { method: 'POST', body: form });
+        } catch (e) {
+            throw new Error(t('err.network'));
+        }
+        let data = null;
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || !data || data.success === false) {
+            throw new Error((data && data.error) || `HTTP ${res.status}`);
+        }
+        return data;
+    }
+
+    function isPos(d) { return d.diagnosis === 'Pneumonia'; }
+    function toneColor(pos) { return pos ? 'var(--danger)' : 'var(--ok)'; }
+
+    function dxChip(d) {
+        if (!d || d.success === false) return `<span class="chip chip-err"><i class="fa-solid fa-circle-exclamation"></i>${t('batch.failed')}</span>`;
+        const pos = isPos(d);
+        return `<span class="chip ${pos ? 'chip-pos' : 'chip-neg'}"><i class="fa-solid ${pos ? 'fa-triangle-exclamation' : 'fa-circle-check'}"></i>${t('dx.' + d.diagnosis)}</span>`;
+    }
+
+    const thPct = () => Math.round(state.threshold * 100) / 100;
+
+    function gaugeHTML(p) {
+        const th = thPct();
+        const pos = p > th;
+        const c = toneColor(pos);
+        const v = Math.max(0, Math.min(100, p));
+        return `
+            <div class="gauge" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v}">
+                <div class="gauge-track" style="background:linear-gradient(90deg, var(--ok-weak) 0 ${th}%, var(--danger-weak) ${th}% 100%)">
+                    <div class="gauge-threshold" style="left:${th}%"></div>
+                    <div class="gauge-marker" style="left:${v}%; border-color:${c}"></div>
+                </div>
+                <div class="gauge-scale"><span>0%</span><span>${th}% · ${t('gauge.threshold')}</span><span>100%</span></div>
+                <div class="gauge-legend"><span class="l-neg">${t('gauge.normal')}</span><span class="l-pos">${t('gauge.pneumonia')}</span></div>
+            </div>`;
+    }
+
+    function errorBox(msg, action) {
+        return `
+            <div class="card-body">
+                <div class="notice error"><i class="fa-solid fa-circle-exclamation"></i><div><strong>${t('err.title')}</strong><br>${esc(msg)}</div></div>
+                ${action ? `<div class="actions"><button class="btn btn-ghost btn-sm" data-action="${action}"><i class="fa-solid fa-rotate-right"></i>${t('btn.retry')}</button></div>` : ''}
+            </div>`;
+    }
+
+    function loadingBox(title, steps) {
+        return `
+            <div class="loading-box">
+                <div class="pulse-ring" aria-hidden="true"></div>
+                <h3>${title}</h3>
+                ${steps ? `<ul class="loading-steps">${steps.map(s => `<li><i class="fa-solid fa-check"></i>${s}</li>`).join('')}</ul>` : ''}
+            </div>`;
+    }
+
+    // Wire a drop target to a handler that receives a FileList
+    function makeDroppable(el, onFiles) {
+        let depth = 0;
+        el.addEventListener('dragenter', e => { e.preventDefault(); depth++; el.classList.add('drag'); });
+        el.addEventListener('dragover', e => { e.preventDefault(); });
+        el.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; el.classList.remove('drag'); } });
+        el.addEventListener('drop', e => {
+            e.preventDefault(); depth = 0; el.classList.remove('drag');
+            if (e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
+        });
+    }
+
+    function activateOnKey(el, fn) {
+        el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+    }
+
+    /* ======================= Health ======================= */
+    function renderStatus() {
+        const el = document.getElementById('status');
+        const txt = document.getElementById('status-text');
+        el.classList.toggle('ok', state.health === 'ready');
+        el.classList.toggle('bad', state.health === 'noModel' || state.health === 'offline');
+        txt.textContent = t('status.' + state.health);
+    }
+
+    async function checkHealth() {
+        try {
+            const res = await fetch(`${API_URL}/health`);
+            const data = await res.json();
+            state.health = data.model_loaded ? 'ready' : 'noModel';
+        } catch (e) {
+            state.health = 'offline';
+        }
+        renderStatus();
+    }
+
+    /* ======================= Single study ======================= */
+    const singleInput = document.getElementById('single-file');
+    const stage = document.getElementById('stage');
+    const viewerState = { invert: false, bright: 100, contrast: 100 };
+
+    function applyViewerFilter() {
+        const img = stage.querySelector('img');
+        if (!img) return;
+        img.style.filter = `brightness(${viewerState.bright}%) contrast(${viewerState.contrast}%)${viewerState.invert ? ' invert(1)' : ''}`;
+    }
+
+    document.getElementById('v-invert').addEventListener('click', e => {
+        viewerState.invert = !viewerState.invert;
+        e.currentTarget.setAttribute('aria-pressed', String(viewerState.invert));
+        applyViewerFilter();
+    });
+    document.getElementById('v-bright').addEventListener('input', e => { viewerState.bright = +e.target.value; applyViewerFilter(); });
+    document.getElementById('v-contrast').addEventListener('input', e => { viewerState.contrast = +e.target.value; applyViewerFilter(); });
+    document.getElementById('v-reset').addEventListener('click', () => {
+        Object.assign(viewerState, { invert: false, bright: 100, contrast: 100 });
+        document.getElementById('v-invert').setAttribute('aria-pressed', 'false');
+        document.getElementById('v-bright').value = 100;
+        document.getElementById('v-contrast').value = 100;
+        stage.classList.remove('zoomed');
+        applyViewerFilter();
+    });
+    document.getElementById('single-pick').addEventListener('click', () => singleInput.click());
+    document.getElementById('enhance').addEventListener('change', e => { state.single.enhance = e.target.checked; });
+
+    singleInput.addEventListener('change', e => {
+        if (e.target.files[0]) startSingle(e.target.files[0]);
+        e.target.value = '';
+    });
+    makeDroppable(stage, files => startSingle(files[0]));
+
+    stage.addEventListener('click', e => {
+        if (e.target.closest('.dropzone')) { singleInput.click(); return; }
+        const img = e.target.closest('img');
+        if (!img) return;
+        const r = img.getBoundingClientRect();
+        img.style.transformOrigin = `${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`;
+        stage.classList.toggle('zoomed');
+    });
+
+    async function startSingle(file) {
+        const s = state.single;
+        if (s.url) URL.revokeObjectURL(s.url);
+        s.file = file;
+        s.url = URL.createObjectURL(file);
+        s.data = null;
+        s.dims = null;
+        s.error = validateFile(file);
+        s.loading = !s.error;
+        stage.classList.remove('zoomed');
+        renderSingle();
+        if (s.error) return;
+
+        const form = new FormData();
+        form.append('file', file);
+        form.append('enhance', String(s.enhance));
+        const usedEnhance = s.enhance;
+        try {
+            const data = await postForm('/predict-single', form);
+            if (s.file !== file) return; // a newer upload replaced this one
+            data._enhance = usedEnhance;
+            if (data.threshold != null) state.threshold = data.threshold * 100;
+            s.data = data;
+        } catch (err) {
+            if (s.file !== file) return;
+            s.error = err.message;
+        }
+        s.loading = false;
+        renderSingle();
+    }
+
+    function renderSingle() {
+        const s = state.single;
+        const content = document.getElementById('stage-content');
+        const report = document.getElementById('single-report');
+
+        // Viewer
+        if (!s.url) {
+            content.innerHTML = `
+                <div class="dropzone" role="button" tabindex="0">
+                    <div class="dz-icon"><i class="fa-solid fa-x-ray"></i></div>
+                    <strong>${t('drop.title')}</strong>
+                    <span>${t('drop.or')}</span>
+                    <span class="hint">${t('formats')}</span>
+                </div>`;
+            const dz = content.querySelector('.dropzone');
+            activateOnKey(dz, () => singleInput.click());
+        } else {
+            const now = new Date();
+            const date = now.toISOString().slice(0, 10);
+            content.innerHTML = `
+                <img src="${s.url}" alt="${esc(s.file.name)}" draggable="false">
+                <div class="overlay-meta tl">${esc(s.file.name)}<br>${date}${s.dims ? `<br>${s.dims}` : ''}</div>
+                <div class="overlay-meta br">${(s.file.size / 1024).toFixed(0)} KB<br>MODEL IN: 224×224</div>
+                ${s.loading ? '<div class="scanline"></div>' : ''}`;
+            const img = content.querySelector('img');
+            img.addEventListener('load', () => {
+                if (!s.dims) {
+                    s.dims = `${img.naturalWidth}×${img.naturalHeight} px`;
+                    const tl = content.querySelector('.overlay-meta.tl');
+                    if (tl) tl.innerHTML = `${esc(s.file.name)}<br>${date}<br>${s.dims}`;
+                }
+            });
+            applyViewerFilter();
+        }
+
+        // Report
+        if (s.loading) {
+            report.innerHTML = `
+                <div class="card-head"><div class="card-title"><i class="fa-solid fa-file-medical"></i>${t('report.title')}</div></div>
+                ${loadingBox(t('loading.title'), [t('loading.s1'), t('loading.s2'), t('loading.s3')])}`;
+        } else if (s.error) {
+            report.innerHTML = `
+                <div class="card-head"><div class="card-title"><i class="fa-solid fa-file-medical"></i>${t('report.title')}</div></div>
+                ${errorBox(s.error, validateFile(s.file) ? null : 'single-retry')}`;
+        } else if (s.data) {
+            report.innerHTML = reportHTML(s.data, s.file.name);
+        } else {
+            report.innerHTML = `
+                <div class="card-head"><div class="card-title"><i class="fa-solid fa-file-medical"></i>${t('report.title')}</div></div>
+                <div class="report-empty">
+                    <div class="re-icon"><i class="fa-solid fa-notes-medical"></i></div>
+                    <h3>${t('report.emptyTitle')}</h3>
+                    <p>${t('report.emptyDesc')}</p>
+                    <ol class="steps"><li>${t('step.1')}</li><li>${t('step.2')}</li><li>${t('step.3')}</li></ol>
+                </div>`;
+        }
+    }
+
+    function reportHTML(d, fileName) {
+        const pos = isPos(d);
+        return `
+            <div class="card-head">
+                <div class="card-title"><i class="fa-solid fa-file-medical"></i>${t('report.title')}</div>
+                <span class="mono small muted">${esc(d.timestamp)}</span>
+            </div>
+            <div class="card-body">
+                <div class="finding ${pos ? 'pos' : 'neg'}">
+                    <div class="finding-top">
+                        <div>
+                            <div class="eyebrow">${t('report.finding')}</div>
+                            <div class="finding-dx"><i class="fa-solid ${pos ? 'fa-triangle-exclamation' : 'fa-circle-check'}"></i>${t('dx.' + d.diagnosis)}</div>
+                        </div>
+                        <div class="finding-conf">
+                            <div class="eyebrow">${t('report.confidence')}</div>
+                            <div class="num">${d.confidence}%</div>
+                        </div>
+                    </div>
+                    <p>${t(pos ? 'finding.pos' : 'finding.neg')}</p>
+                </div>
+
+                <div class="field">
+                    <div class="field-label"><span>${t('report.prob')}</span><span class="mono" style="color:${toneColor(pos)}">${d.probabilities.pneumonia}%</span></div>
+                    ${gaugeHTML(d.probabilities.pneumonia)}
+                </div>
+
+                <dl class="kv">
+                    <div><dt>${t('report.level')}</dt><dd>${t('conf.' + d.confidence_level)}</dd></div>
+                    <div><dt>${t('report.severity')}</dt><dd>${t('sev.' + d.severity)}</dd></div>
+                    <div><dt>${t('report.normalProb')}</dt><dd class="mono">${d.probabilities.normal}%</dd></div>
+                    <div><dt>${t('report.enhance')}</dt><dd>${d._enhance ? t('yes') : t('no')}</dd></div>
+                    <div><dt>${t('report.file')}</dt><dd class="mono fname" title="${esc(fileName)}">${esc(fileName)}</dd></div>
+                    <div><dt>${t('report.time')}</dt><dd class="mono">${esc(d.timestamp)}</dd></div>
+                </dl>
+
+                ${d.confidence < 60 ? `<div class="notice warn"><i class="fa-solid fa-triangle-exclamation"></i><span>${t('near.threshold', { th: thPct() })}</span></div>` : ''}
+                <div class="notice info"><i class="fa-solid fa-user-doctor"></i><span>${t('disclaimer')}</span></div>
+
+                <div class="actions">
+                    <button class="btn btn-primary" data-action="print"><i class="fa-solid fa-print"></i>${t('btn.print')}</button>
+                    <button class="btn btn-ghost" data-action="single-new"><i class="fa-solid fa-plus"></i>${t('btn.new')}</button>
+                </div>
+            </div>`;
+    }
+
+    /* ======================= Batch ======================= */
+    const batchDrop = document.getElementById('batch-drop');
+    const batchInput = document.getElementById('batch-files');
+    batchDrop.addEventListener('click', () => batchInput.click());
+    activateOnKey(batchDrop, () => batchInput.click());
+    batchInput.addEventListener('change', e => { if (e.target.files.length) startBatch(e.target.files); e.target.value = ''; });
+    makeDroppable(batchDrop, startBatch);
+
+    async function startBatch(fileList) {
+        const b = state.batch;
+        const files = Array.from(fileList).filter(f => !validateFile(f));
+        if (!files.length) {
+            Object.assign(b, { loading: false, data: null, error: t('err.type') });
+            renderBatch();
+            return;
+        }
+        const token = {};
+        b.token = token;
+        Object.assign(b, { loading: true, count: files.length, data: null, error: null, filter: 'all' });
+        renderBatch();
+        const form = new FormData();
+        files.forEach(f => form.append('files[]', f));
+        try {
+            const data = await postForm('/predict-multiple', form);
+            if (b.token !== token) return;
+            b.data = data;
+        } catch (err) {
+            if (b.token !== token) return;
+            b.error = err.message;
+        }
+        b.loading = false;
+        renderBatch();
+    }
+
+    function renderBatch() {
+        const b = state.batch;
+        const out = document.getElementById('batch-results');
+        if (b.loading) { out.innerHTML = `<div class="card" style="margin-top:20px">${loadingBox(t('batch.loading', { n: b.count }))}</div>`; return; }
+        if (b.error) { out.innerHTML = `<div class="card" style="margin-top:20px">${errorBox(b.error)}</div>`; return; }
+        if (!b.data) { out.innerHTML = ''; return; }
+
+        const st = b.data.statistics;
+        const rows = b.data.results.filter(r =>
+            b.filter === 'all' ? true :
+            b.filter === 'review' ? (r.success !== false && r.confidence < 60) :
+            r.diagnosis === b.filter);
+        const reviewCount = b.data.results.filter(r => r.success !== false && r.confidence < 60).length;
+
+        out.innerHTML = `
+            <div class="tiles">
+                <div class="tile"><div class="tile-label"><i class="fa-solid fa-images"></i>${t('batch.total')}</div><div class="tile-value">${st.total_images}</div></div>
+                <div class="tile pos"><div class="tile-label"><span class="dot" style="background:var(--danger)"></span>${t('dx.Pneumonia')}</div><div class="tile-value">${st.pneumonia_count}</div><div class="tile-sub mono">${st.pneumonia_percentage}%</div></div>
+                <div class="tile neg"><div class="tile-label"><span class="dot" style="background:var(--ok)"></span>${t('dx.Normal')}</div><div class="tile-value">${st.normal_count}</div><div class="tile-sub mono">${st.normal_percentage}%</div></div>
+                <div class="tile"><div class="tile-label"><i class="fa-solid fa-gauge-high"></i>${t('batch.avg')}</div><div class="tile-value">${st.avg_confidence}%</div><div class="tile-sub">${t('batch.range', { min: st.min_confidence, max: st.max_confidence })}</div></div>
+            </div>
+
+            <div class="card dist"><div class="card-body">
+                <div class="field-label"><span>${t('batch.dist')}</span></div>
+                <div class="dist-bar">
+                    ${st.pneumonia_count ? `<span style="width:${st.pneumonia_percentage}%;background:var(--danger)"></span>` : ''}
+                    ${st.normal_count ? `<span style="width:${st.normal_percentage}%;background:var(--ok)"></span>` : ''}
+                </div>
+                <div class="dist-legend">
+                    <span><span class="dot" style="background:var(--danger)"></span>${t('dx.Pneumonia')} · <b class="mono">${st.pneumonia_count}</b></span>
+                    <span><span class="dot" style="background:var(--ok)"></span>${t('dx.Normal')} · <b class="mono">${st.normal_count}</b></span>
+                    ${reviewCount ? `<span class="flag"><i class="fa-solid fa-flag"></i>${t('batch.lowConf')} · ${reviewCount}</span>` : ''}
+                </div>
+            </div></div>
+
+            <div class="card">
+                <div class="card-head toolbar">
+                    <div class="card-title"><i class="fa-solid fa-table-list"></i>${t('batch.results')}</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                        <div class="seg" role="group">
+                            ${[['all', t('batch.all')], ['Pneumonia', t('dx.Pneumonia')], ['Normal', t('dx.Normal')], ['review', t('batch.lowConf')]]
+                                .map(([k, l]) => `<button type="button" data-filter="${k}" aria-pressed="${b.filter === k}">${l}</button>`).join('')}
+                        </div>
+                        <button class="btn btn-ghost btn-sm" data-action="batch-csv"><i class="fa-solid fa-file-csv"></i>${t('batch.export')}</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr>
+                            <th>#</th><th>${t('col.image')}</th><th>${t('col.file')}</th><th>${t('col.result')}</th>
+                            <th>${t('col.prob')}</th><th class="col-hide-sm">${t('col.conf')}</th>
+                        </tr></thead>
+                        <tbody>
+                            ${rows.length ? rows.map(r => batchRow(r, b.data.results.indexOf(r) + 1)).join('')
+                                : `<tr><td colspan="6" class="muted" style="text-align:center;padding:28px">${t('batch.none')}</td></tr>`}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+
+    function batchRow(r, n) {
+        const ok = r.success !== false;
+        const pos = ok && isPos(r);
+        return `
+            <tr>
+                <td class="mono muted">${n}</td>
+                <td><img class="thumb" src="${esc(r.filepath)}" alt="" loading="lazy"></td>
+                <td><div class="fname mono small" title="${esc(r.filename)}">${esc(r.filename)}</div></td>
+                <td>${dxChip(r)}${ok && r.confidence < 60 ? `<div class="flag" style="margin-top:4px"><i class="fa-solid fa-flag"></i>${t('batch.lowConf')}</div>` : ''}</td>
+                <td>${ok ? `<span class="mini-bar"><span style="width:${r.probabilities.pneumonia}%;background:${toneColor(pos)}"></span></span><span class="mono">${r.probabilities.pneumonia}%</span>` : `<span class="small muted">${esc(r.error)}</span>`}</td>
+                <td class="mono col-hide-sm">${ok ? r.confidence + '%' : '—'}</td>
+            </tr>`;
+    }
+
+    function exportBatchCSV() {
+        const d = state.batch.data;
+        if (!d) return;
+        const head = ['#', 'filename', 'diagnosis', 'confidence_%', 'pneumonia_%', 'normal_%', 'confidence_level', 'severity', 'timestamp'];
+        const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const lines = [head.join(',')].concat(d.results.map((r, i) => [
+            i + 1, r.filename, r.success === false ? 'ERROR' : r.diagnosis, r.confidence ?? '',
+            r.probabilities?.pneumonia ?? '', r.probabilities?.normal ?? '', r.confidence_level ?? '', r.severity ?? '', r.timestamp ?? ''
+        ].map(q).join(',')));
+        const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `pneumonia_batch_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    /* ======================= Compare ======================= */
+    const compareInputs = [document.getElementById('compare-file-1'), document.getElementById('compare-file-2')];
+    const compareBtn = document.getElementById('compare-btn');
+
+    [0, 1].forEach(i => {
+        const slot = document.getElementById(`slot-${i + 1}`);
+        slot.addEventListener('click', () => compareInputs[i].click());
+        activateOnKey(slot, () => compareInputs[i].click());
+        makeDroppable(slot, files => setCompareFile(i, files[0]));
+        compareInputs[i].addEventListener('change', e => { if (e.target.files[0]) setCompareFile(i, e.target.files[0]); e.target.value = ''; });
+    });
+    compareBtn.addEventListener('click', runCompare);
+
+    function setCompareFile(i, file) {
+        const c = state.compare;
+        const err = validateFile(file);
+        if (err) { c.error = err; c.data = null; renderCompare(); return; }
+        if (c.urls[i]) URL.revokeObjectURL(c.urls[i]);
+        c.files[i] = file;
+        c.urls[i] = URL.createObjectURL(file);
+        c.data = null; c.error = null;
+        renderSlots();
+        renderCompare();
+    }
+
+    function renderSlots() {
+        const c = state.compare;
+        [0, 1].forEach(i => {
+            const slot = document.getElementById(`slot-${i + 1}`);
+            const tag = `<span class="slot-tag">${t(i ? 'compare.slot2' : 'compare.slot1')}</span>`;
+            slot.innerHTML = c.urls[i]
+                ? `${tag}<img src="${c.urls[i]}" alt="${esc(c.files[i].name)}"><span class="slot-change"><i class="fa-solid fa-arrows-rotate"></i> ${t('compare.change')}</span>`
+                : `${tag}<div class="dropzone" style="inset:14px"><div class="dz-icon"><i class="fa-solid fa-x-ray"></i></div><strong>${t('compare.pick')}</strong><span class="hint">${t('formats')}</span></div>`;
+        });
+        compareBtn.disabled = !(c.files[0] && c.files[1]) || c.loading;
+    }
+
+    async function runCompare() {
+        const c = state.compare;
+        if (!(c.files[0] && c.files[1])) return;
+        Object.assign(c, { loading: true, data: null, error: null });
+        renderSlots();
+        renderCompare();
+        const form = new FormData();
+        form.append('file1', c.files[0]);
+        form.append('file2', c.files[1]);
+        try {
+            c.data = await postForm('/compare', form);
+        } catch (err) {
+            c.error = err.message;
+        }
+        c.loading = false;
+        renderSlots();
+        renderCompare();
+    }
+
+    function renderCompare() {
+        const c = state.compare;
+        const out = document.getElementById('compare-results');
+        if (c.loading) { out.innerHTML = `<div class="card">${loadingBox(t('compare.loading'))}</div>`; return; }
+        if (c.error) { out.innerHTML = `<div class="card">${errorBox(c.error)}</div>`; return; }
+        if (!c.data) { out.innerHTML = ''; return; }
+
+        const { image1: a, image2: b, comparison: cmp } = c.data;
+        if (a.success === false || b.success === false) {
+            out.innerHTML = `<div class="card">${errorBox((a.error || b.error))}</div>`;
+            return;
+        }
+        const agree = cmp.same_diagnosis;
+        const tone = agree ? (cmp.agreement_level === 'Strong Agreement' ? 'ok' : 'warn') : 'danger';
+        const delta = b.probabilities.pneumonia - a.probabilities.pneumonia;
+        const deltaStr = `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta).toFixed(1)}`;
+
+        out.innerHTML = `
+            <div class="card verdict">
+                <div class="verdict-icon" style="background:var(--${tone}-weak);color:var(--${tone})"><i class="fa-solid ${agree ? 'fa-equals' : 'fa-not-equal'}"></i></div>
+                <div>
+                    <div class="eyebrow">${t('agree.' + cmp.agreement_level)}</div>
+                    <h3>${agree ? t('compare.same', { dx: t('dx.' + a.diagnosis) }) : t('compare.diff')}</h3>
+                </div>
+                <div class="verdict-stats">
+                    <div><div class="v" dir="ltr">${deltaStr}</div><div class="k">${t('compare.delta')}</div></div>
+                    <div><div class="v">${cmp.confidence_difference}%</div><div class="k">${t('compare.confDiff')}</div></div>
+                    <div><div class="v" style="font-family:var(--font);font-size:16px;font-weight:700">${t(cmp.more_confident === 'Image 1' ? 'compare.img1' : 'compare.img2')}</div><div class="k">${t('compare.moreConf')}</div></div>
+                </div>
+            </div>
+            <div class="pair">
+                ${[a, b].map((d, i) => `
+                    <div class="card" style="overflow:hidden">
+                        <div class="card-head">
+                            <div class="card-title" style="min-width:0"><i class="fa-solid fa-x-ray"></i><span>${t(i ? 'compare.slot2' : 'compare.slot1')}</span></div>
+                            ${dxChip(d)}
+                        </div>
+                        <div class="card-body">
+                            <div class="field">
+                                <div class="field-label"><span>${t('report.prob')}</span><span class="mono" style="color:${toneColor(isPos(d))}">${d.probabilities.pneumonia}%</span></div>
+                                ${gaugeHTML(d.probabilities.pneumonia)}
+                            </div>
+                            <dl class="kv">
+                                <div><dt>${t('report.confidence')}</dt><dd class="mono">${d.confidence}%</dd></div>
+                                <div><dt>${t('report.level')}</dt><dd>${t('conf.' + d.confidence_level)}</dd></div>
+                                <div><dt>${t('report.severity')}</dt><dd>${t('sev.' + d.severity)}</dd></div>
+                                <div><dt>${t('report.file')}</dt><dd class="mono fname" title="${esc(d.filename)}">${esc(d.filename)}</dd></div>
+                            </dl>
+                        </div>
+                    </div>`).join('')}
+            </div>
+            <div class="notice info" style="margin-top:16px"><i class="fa-solid fa-user-doctor"></i><span>${t('disclaimer')}</span></div>`;
+    }
+
+    /* ======================= About ======================= */
+    async function loadAbout() {
+        const s = state.about;
+        s.loading = true; s.error = null;
+        renderAbout();
+        try {
+            const res = await fetch(`${API_URL}/model-info`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            s.data = data;
+            if (data.threshold != null) state.threshold = data.threshold * 100;
+        } catch (e) {
+            s.error = t('about.unavailable');
+        }
+        s.loading = false;
+        renderAbout();
+    }
+
+    function renderAbout() {
+        const s = state.about;
+        const out = document.getElementById('about-content');
+        if (s.loading) { out.innerHTML = `<div class="card">${loadingBox('…')}</div>`; return; }
+        const m = s.data || {};
+        const val = v => v != null ? esc(v) : '—';
+        const pipe = ['pipe.load', 'pipe.resize', 'pipe.norm', 'pipe.cnn', 'pipe.out']
+            .map(k => `<span>${t(k)}</span>`).join(`<i class="fa-solid fa-arrow-right"></i>`);
+
+        out.innerHTML = `
+            ${s.error ? `<div class="notice error"><i class="fa-solid fa-circle-exclamation"></i><span>${s.error}</span><button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" data-action="about-retry">${t('btn.retry')}</button></div>` : ''}
+            <div class="metric-row">
+                <div class="tile metric"><div class="tile-label"><i class="fa-solid fa-bullseye"></i>${t('about.accuracy')}</div><div class="tile-value">${val(m.accuracy)}</div><div class="tile-sub">${t('about.accuracyHint', { n: m.test_images != null ? Number(m.test_images).toLocaleString('en-US') : '—' })}</div></div>
+                <div class="tile metric"><div class="tile-label"><i class="fa-solid fa-heart-pulse"></i>${t('about.recall')}</div><div class="tile-value">${val(m.recall)}</div><div class="tile-sub">${t('about.recallHint')}</div></div>
+                <div class="tile metric"><div class="tile-label"><i class="fa-solid fa-shield-heart"></i>${t('about.specificity')}</div><div class="tile-value">${val(m.specificity)}</div><div class="tile-sub">${t('about.specificityHint')}</div></div>
+                <div class="tile metric"><div class="tile-label"><i class="fa-solid fa-crosshairs"></i>${t('about.precision')}</div><div class="tile-value">${val(m.precision)}</div><div class="tile-sub">${t('about.precisionHint')}</div></div>
+            </div>
+            ${m.test_breakdown ? `
+            <div class="field-label"><span>${t('about.breakdown')}</span></div>
+            <div class="breakdown">
+                ${[['kermany', 'fa-child'], ['rsna', 'fa-person']].map(([k, icon]) => {
+                    const b = m.test_breakdown[k] || {};
+                    return `<div class="tile"><div class="tile-label"><i class="fa-solid ${icon}"></i>${t('about.' + k)}</div>
+                        <div class="tile-value">${b.accuracy != null ? b.accuracy.toFixed(1) + '%' : '—'}</div>
+                        <div class="tile-sub mono">${b.images ?? '—'} ${t('about.images')} · Recall ${b.recall != null ? b.recall.toFixed(1) + '%' : '—'} · AUC ${b.auc ?? '—'}</div></div>`;
+                }).join('')}
+            </div>` : ''}
+            <div class="about-grid">
+                <div class="card">
+                    <div class="card-head"><div class="card-title"><i class="fa-solid fa-microchip"></i>${t('about.specs')}</div></div>
+                    <div class="card-body">
+                        <table class="spec"><tbody>
+                            <tr><td>${t('about.name')}</td><td>${val(m.model_name)}</td></tr>
+                            <tr><td>${t('about.version')}</td><td class="mono">${val(m.version)}</td></tr>
+                            <tr><td>${t('about.arch')}</td><td>${val(m.architecture)}</td></tr>
+                            <tr><td>${t('about.layers')}</td><td class="mono">${val(m.layers)}</td></tr>
+                            <tr><td>${t('about.params')}</td><td class="mono">${m.parameters != null ? Number(m.parameters).toLocaleString('en-US') : '—'}</td></tr>
+                            <tr><td>${t('about.input')}</td><td class="mono">${val(m.input_size)}</td></tr>
+                            <tr><td>${t('about.output')}</td><td>${t('about.outputVal')}</td></tr>
+                            <tr><td>${t('about.trainImages')}</td><td class="mono">${m.train_images != null ? Number(m.train_images).toLocaleString('en-US') : '—'}</td></tr>
+                            <tr><td>${t('about.file')}</td><td class="mono">${val(m.model_file)}</td></tr>
+                        </tbody></table>
+                        <div class="section-h">${t('about.pipeline')}</div>
+                        <div class="pipeline">${pipe}</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-head"><div class="card-title"><i class="fa-solid fa-stethoscope"></i>${t('about.read')}</div></div>
+                    <div class="card-body">
+                        <div style="margin-bottom:14px">${gaugeHTML(72)}</div>
+                        <p style="font-size:13.5px;margin-bottom:6px">${t('about.threshold', { th: thPct() })}</p>
+                        <div class="section-h">${t('about.severity')}</div>
+                        <ul class="legend-list">
+                            <li><span class="range">&gt; 90%</span><span>${t('sev.Very High')}</span></li>
+                            <li><span class="range">75 – 90%</span><span>${t('sev.High')}</span></li>
+                            <li><span class="range">60 – 75%</span><span>${t('sev.Medium')}</span></li>
+                            <li><span class="range">${thPct()} – 60%</span><span>${t('sev.Low')}</span></li>
+                        </ul>
+                        <div class="section-h">${t('about.confLevels')}</div>
+                        <ul class="legend-list">
+                            <li><span class="range">&gt; 90%</span><span>${t('conf.Very Confident')}</span></li>
+                            <li><span class="range">75 – 90%</span><span>${t('conf.Confident')}</span></li>
+                            <li><span class="range">60 – 75%</span><span>${t('conf.Moderate')}</span></li>
+                            <li><span class="range">&le; 60%</span><span>${t('conf.Low Confidence')}</span></li>
+                        </ul>
+                        <div class="section-h">${t('about.limits')}</div>
+                        <ul class="bullets">
+                            <li>${t('limit.1')}</li><li>${t('limit.2')}</li><li>${t('limit.3')}</li><li>${t('limit.4')}</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    /* ======================= Global actions ======================= */
+    document.addEventListener('click', e => {
+        const f = e.target.closest('[data-filter]');
+        if (f) { state.batch.filter = f.dataset.filter; renderBatch(); return; }
+        const a = e.target.closest('[data-action]');
+        if (!a) return;
+        switch (a.dataset.action) {
+            case 'print':
+                document.getElementById('print-date').textContent = new Date().toLocaleString(lang === 'ar' ? 'ar' : 'en-GB');
+                window.print();
+                break;
+            case 'single-new': singleInput.click(); break;
+            case 'single-retry': if (state.single.file) startSingle(state.single.file); break;
+            case 'batch-csv': exportBatchCSV(); break;
+            case 'about-retry': loadAbout(); break;
+        }
+    });
+
+    applyLang();
+    checkHealth().then(() => { if (state.health === 'ready') loadAbout(); });
+</script>
+</body>
+</html>
